@@ -6,7 +6,7 @@ viewpoints: [structural, runtime]
 
 # Build and deployment
 
-Which target boundaries does CMake enforce, and which rules must maintainers preserve across the build runner and release packager? Use this view when changing target dependencies, toolchain settings, test registration or the Windows package. The view covers target dependencies and the Debug-runner and release-packager workflows: admission, phase ordering, command environments and failure boundaries.
+Which target boundaries does CMake enforce, and which rules must maintainers preserve across the build runner and release packager? Use this view when changing target dependencies, toolchain settings, test registration, the CI workflow or the Windows package. The view covers target dependencies and the Windows resource compiled into the executable. It also explains the safeguards, phase order, command environments and failure boundaries of the Debug runner, release packager and GitHub Actions workflows.
 
 It does not restate [`BUILDING.md`](../../../BUILDING.md), which is the how-to, nor the QML registration rules, which belong to [QML boundary][qml-boundary].
 
@@ -40,7 +40,7 @@ The executable reaches the lower libraries through `ksv_app`; the displayed path
 
 The library edges are `PUBLIC`, while every link of the `ksv` executable, drawn or omitted, is `PRIVATE` ([`CMakeLists.txt`](../../../CMakeLists.txt) `target_link_libraries(ksv PRIVATE ...)`). Some direct links are omitted where the diagram already shows a transitive path: `ksv` also links `ksv_ui`, `ksv_data`, `ksv_qt_data` and `ksv_domain` directly; `ksv_app` also links `ksv_contracts` and `ksv_domain`; `ksv_qt_data` also links `ksv_contracts` and `ksv_domain`; `ksv_data` and `ksv_qt_data` link Qt or protobuf as external packages not drawn here. Sources: [`CMakeLists.txt`](../../../CMakeLists.txt), [`src/app/CMakeLists.txt`](../../../src/app/CMakeLists.txt), [`src/ui/CMakeLists.txt`](../../../src/ui/CMakeLists.txt), [`src/qt_data/CMakeLists.txt`](../../../src/qt_data/CMakeLists.txt), [`src/data/CMakeLists.txt`](../../../src/data/CMakeLists.txt), [`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt) and [`src/domain/CMakeLists.txt`](../../../src/domain/CMakeLists.txt). The layer rules this should be read against are in [`AGENTS.md`](../../../AGENTS.md).
 
-**Type:** header-dependency refinement of the production-target model. **Scope:** the two cross-layer header dependencies with no direct target link: `ksv_ui → ksv_app` and `ksv_contracts → ksv_data`. **Concern:** source dependencies that the target-link model does not expose.
+**Type:** header-dependency refinement of the production-target model. **Scope:** the cross-layer header dependencies with no direct target link: `ksv_ui → ksv_app`, `ksv_ui → ksv_data`, `ksv_qt_data → ksv_app` and `ksv_contracts → ksv_data`. **Concern:** source dependencies that the target-link model does not expose.
 
 ```mermaid
 ---
@@ -48,8 +48,10 @@ title: Cross-layer header dependencies without direct target links
 ---
 flowchart LR
     accTitle: Cross-layer header dependencies without direct target links
-    accDescr: UI headers include an application interface, and contracts headers include data interfaces, without direct target links for those dependencies.
+    accDescr: UI headers include an application interface and data benchmark vocabulary, qt_data headers include an application interface, and contracts headers include data interfaces, without direct target links for those dependencies.
     UI["ksv_ui"] -->|i_session_controller.h| App["ksv_app<br/>application interface"]
+    UI -->|benchmark_library_snapshot.h| Data
+    QtData["ksv_qt_data"] -->|i_session_controller.h| App
     Contracts["ksv_contracts"] --> Data["ksv_data<br/>data/interfaces headers"]
 ```
 
@@ -58,14 +60,14 @@ flowchart LR
 - Box: production static-library target owning the headers
 - Solid arrow: includes headers owned by, from the including target to the header owner
 
-CMake link dependencies and architectural layer dependencies point in different directions. The layers say `ui → app`, but the CMake link from `ksv_app` to `ksv_ui` exists because `App` constructs the view models. The `ksv_ui → ksv_app` header edge shows UI code including the application interface `i_session_controller.h`; the `ksv_contracts → ksv_data` edge concerns `data/interfaces` headers. The enforcement table below gives the source evidence. `ksv_contracts` is the Qt-free interface-and-rules library that both sides use, and it links only the domain.
+CMake link dependencies and architectural layer dependencies point in different directions. The layers say `ui → app`, but the CMake link from `ksv_app` to `ksv_ui` exists because `App` constructs the view models. The `ksv_ui → ksv_app` header edge shows UI code including the application interface `i_session_controller.h`; the `ksv_contracts → ksv_data` edge concerns `data/interfaces` headers. The `ksv_ui → ksv_data` edge is a dependency on benchmark value vocabulary: `benchmark_format.h` includes `data/interfaces/benchmark_library_snapshot.h` and uses `data::BenchmarkMigrationFailure` in a presentation function signature. The `ksv_qt_data → ksv_app` edge is an include only: `file_service.h` includes `app/usecases/i_session_controller.h` although `FileService`'s declarations do not use it. The enforcement table below gives the source evidence. `ksv_contracts` is the Qt-free interface-and-rules library that both sides use, and it links only the domain.
 
 ### Layer boundaries enforced by the build
 
 | Rule a reader might assume | What actually holds | Evidence |
 |---|---|---|
 | A layer can include only the layers below its target links | Not enforced. The top-level file calls `include_directories(${PROJECT_SOURCE_DIR}/src)` for every target, so any translation unit can name any header as `app/...`, `data/...`, `ui/...`. | [`CMakeLists.txt`](../../../CMakeLists.txt) |
-| `ksv_ui` depends only on contracts | It links only `ksv_contracts`, yet `session_vm.h` includes `app/usecases/i_session_controller.h`. This compiles through the global include path and the include roots (`src` and `src/app`) that `ksv_contracts` exports `PUBLIC`, which `ksv_ui` inherits ([`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt)). Presentation reaches `data/interfaces/` headers only indirectly, through the contracts headers that include them (next row). | [`session_vm.h`](../../../src/ui/presentation/app/session_vm.h) |
+| `ksv_ui` depends only on contracts | It links only `ksv_contracts`, yet `session_vm.h` includes `app/usecases/i_session_controller.h`. This compiles through the global include path and the include roots (`src` and `src/app`) that `ksv_contracts` exports `PUBLIC`, which `ksv_ui` inherits ([`src/app/contracts/CMakeLists.txt`](../../../src/app/contracts/CMakeLists.txt)). Presentation also includes a `data/interfaces/` header directly (`benchmark_format.h` includes `benchmark_library_snapshot.h`), and `file_service.h` in `ksv_qt_data` includes the same `i_session_controller.h` without linking `ksv_app`. | [`session_vm.h`](../../../src/ui/presentation/app/session_vm.h), [`benchmark_format.h`](../../../src/ui/presentation/benchmarks/benchmark_format.h), [`file_service.h`](../../../src/qt_data/file_service.h) |
 | `contracts` and `data/interfaces` are separate layers | They include each other: contracts headers such as `i_benchmark_manager_use_case.h` and `benchmark_manager_state.h` include `data/interfaces/` headers, while data ports such as `i_profile_service.h`, `i_file_service.h` and the two image writers include contracts headers. The link graph shows only `data → contracts`. | [`i_benchmark_manager_use_case.h`](../../../src/app/contracts/i_benchmark_manager_use_case.h), [`i_profile_service.h`](../../../src/data/interfaces/i_profile_service.h) |
 | Static-library links catch an upward call | Not at library level. Static libraries defer unresolved symbols and CMake permits cycles among them, so an unresolved upward reference may surface only when an executable links. | CMake behaviour; not exercised in this repository |
 | Lower layers are free of Qt | `ksv_domain`, `ksv_contracts` and `ksv_data` declare no Qt link dependency, so they receive no Qt include path through those links. `ksv_qt_data`, `ksv_ui` and `ksv_app` do link Qt. | the `target_link_libraries` calls above |
@@ -80,7 +82,7 @@ The consequence is that the layering is upheld by review, by the `I*` interface 
 Protobuf and Qt write generated files only under the build tree.
 
 - **Protobuf.** [`src/data/CMakeLists.txt`](../../../src/data/CMakeLists.txt) calls `protobuf_generate` for `perf.proto`, `profile.proto` and `migration/profile_v3.proto`, with `PROTOC_EXE` set to the configured `protoc`, and exposes the build directory as a `PUBLIC` include directory of `ksv_data`. Under MinGW it first stages `protoc.exe` with the vcpkg and compiler runtime DLLs it needs into `protoc-runtime/` in the build tree and fails configure if any is missing; under MSVC `protoc` runs in place. Staging avoids modifying the dependency install.
-- **Qt codegen.** The root enables `AUTOMOC`, `AUTORCC` and `AUTOUIC`. `ksv_ui` is a `qt_add_qml_module` with `NO_PLUGIN`, which generates the type registration and QML resources into `build/.../KovaaksStatsViewer`. [QML boundary][qml-boundary] owns the header include-path and explicit registration requirements for the static QML module.
+- **Qt codegen.** The root enables `AUTOMOC`, `AUTORCC` and `AUTOUIC`. `ksv_ui` is a `qt_add_qml_module` with `NO_PLUGIN`, which generates the type registration and QML resources into `build/.../KovaaksStatsViewer`. [QML boundary][qml-boundary] owns the header include-path and explicit registration requirements for the static QML module. `src/ui/CMakeLists.txt` also sets the cache variable `QML_IMPORT_PATH` to that generated directory. It is editor-only: IDE code models find `KovaaksStatsViewer/qmldir` through it, and the application never reads it ([`src/ui/CMakeLists.txt`](../../../src/ui/CMakeLists.txt)).
 
 ## Configurations and what they gate
 
@@ -95,9 +97,15 @@ The build runner configures a Debug tree with testing and dev tools on (`orchest
 
 The normal workflows run tests in Debug and ship Release without tests. The Debug suite therefore does not exercise the Release-only definitions or executable subsystem flag. The packaging smoke test checks that the packaged process starts and loads its modules, not those definitions or the subsystem directly.
 
-The top-level `find_package(Qt6 ...)` always requires `Test`, `QuickTest` and `Network`, even for the packaging configuration that builds no tests or tools, so a Qt installation lacking those modules fails the release configure.
+The top-level `find_package(Qt6 ...)` always requires `Test`, `QuickTest` and `Network`, even for the packaging configuration that builds no tests or tools, so a Qt installation lacking those modules fails the release configure. It also requires `Svg`, which `ksv` links so that the `qsvg` image-format plugin is available for SVG button icons (the purpose the root `CMakeLists.txt` comment gives). Whether `windeployqt` copies that plugin into the package was not inspected.
 
-`CMakeLists.txt` also contains a hard-coded fallback `Qt6_DIR` under `C:/Qt/6.12.0/` used only when none is given; both scripts always pass `-DQt6_DIR`, so the fallback is not part of the supported flow. No `CMakePresets.json` or `vcpkg.json` exists: vcpkg is used in classic mode, so the `protobuf` version (and `gtest`, which only the tests link) come from the configured vcpkg installation, and the repository pins neither dependency.
+`CMakeLists.txt` also contains a hard-coded fallback `Qt6_DIR` under `C:/Qt/6.12.0/` used only when none is given; both scripts always pass `-DQt6_DIR`, so the fallback is not part of the supported flow. No tracked `CMakePresets.json` or `vcpkg.json` exists: vcpkg is used in classic mode, so the `protobuf` version (and `gtest`, which only the tests link) come from the configured vcpkg installation. For local and release builds the repository pins neither dependency. CI pins a vcpkg commit in its workflow environment instead of a manifest (see [Continuous integration](#continuous-integration)).
+
+## Windows resource and application icon
+
+`ksv` compiles `resources/app-icon/ksv.rc` as a source. The file holds one `ICON` resource, `IDI_ICON1`, which Qt's Windows platform plugin loads as every window's default icon, so it covers the title bar, the taskbar and the `.exe` in Explorer. The `.ico` is generated from `app-icon.svg` by `scripts/make_app_icon.py`, which is not part of the build ([`ksv.rc`](../../../resources/app-icon/ksv.rc)).
+
+When the resource compiler's path matches `windres`, the root file replaces `CMAKE_RC_COMPILE_OBJECT` with a command line that carries no defines and no include paths. `windres` runs its preprocessor through `cmd.exe`, which splits a command line containing a quote, such as a quoted define or an include path with a space, and so breaks the toolchain's own `Program Files` path ([`CMakeLists.txt`](../../../CMakeLists.txt)). The override sits before `qt_add_executable(ksv ...)` and is safe only while `ksv.rc` needs neither. A plausible break is a `VERSIONINFO` block that includes `winver.h` through an include path, or an `.rc` that uses `KSV_VERSION`: the override would drop the include path and the define. MSVC's `rc` does not use this override.
 
 ## Developer tools
 
@@ -107,6 +115,9 @@ The top-level `find_package(Qt6 ...)` always requires `Test`, `QuickTest` and `N
 | `ksv_driver` and `ksv_driver_core` ([`tools/driver`](../../../tools/driver/CMakeLists.txt)) | `KSV_BUILD_GALLERY` and not Release | A headless host that serves an automation protocol on localhost for `scripts/ui_driver.py`. `ksv_driver_core` is a library so the integration tests can use it. |
 | `ksv_capture_measure` | `KSV_BUILD_CAPTURE_MEASURE` | Measures capture cost to inform the capture limits; takes a header from `tests/ui/capture`. |
 | `scripts/ui_driver.py`, `scripts/make_dummy_kovaaks.py`, `scripts/arch_doc.py` | not built | Agent-side scripts: drive the automation protocol, generate a fake KovaaK's directory, and maintain this documentation. `ui_driver.py` reuses the Python toolchain resolution. |
+| `scripts/tests` | `pytest` | Tests for the runner, the UI automation scripts and `arch_doc`. Run by `uv run pytest` ([`pyproject.toml`](../../../pyproject.toml) sets `testpaths`) and by the CI `script-tests` job, outside CTest. |
+
+`pyproject.toml` and `uv.lock` are tracked. They declare Python 3.13 or later, the runtime dependencies `markdown-it-py` and `PyYAML` (used by `arch_doc.py`) and a `pytest` development group. The runner, the packager and the C++ build need no Python packages from it ([`pyproject.toml`](../../../pyproject.toml)).
 
 `package-release.ps1 -CaptureMeasure` builds `ksv_capture_measure` into `build/measure/` and deploys dependencies beside its executable instead of packaging. This mode works only with the MSVC profile: its deployment step reads the MSVC runtime directory that only that branch sets.
 
@@ -137,6 +148,7 @@ Because `integration_tests` conditionally adds sources, its content depends on t
 |---|---|---|
 | Debug runner (`build_and_test.py`) | `build/script-build/` | Checks fingerprint and cache, builds, then runs the selected suites. |
 | Release packager (`package-release.ps1`) | Release build tree and Windows zip | Builds Release, deploys dependencies, optionally smoke-tests, then zips. |
+| GitHub Actions ([`ci.yml`](../../../.github/workflows/ci.yml)) | Failure logs only; no package | Provisions a pinned MinGW environment, runs the Debug runner and `qmllint`, and runs the script tests. |
 
 ## Toolchain configuration
 
@@ -151,14 +163,37 @@ The runner and packager resolve tool paths from layered env files in `scripts/`;
 
 A value containing `<` or `>` is a placeholder and fails resolution with a message naming the key. Machine-specific paths are placeholders in the tracked files; other values are real there, such as the flavour, the vcpkg triplets and the runner settings ([`toolchain.defaults.env`](../../../scripts/toolchain.defaults.env), [`toolchain.mingw.env`](../../../scripts/toolchain.mingw.env), [`toolchain.msvc.env`](../../../scripts/toolchain.msvc.env)). A linked git worktree without its own local file uses the main worktree's, found through `git rev-parse --git-common-dir`. `KSV_VCVARS_BAT` is required only for MSVC.
 
-The layering exists twice, and maintainers keep the shared resolution rules aligned in both implementations by hand:
+Two implementations resolve the layered configuration. CI supplies values through the process environment to the Python implementation. Maintainers must keep the two implementations' shared resolution rules aligned by hand:
 
 | Implementation | Consumers |
 |---|---|
 | [`scripts/build_runner/config.py`](../../../scripts/build_runner/config.py) (`resolve_toolchain`, `find_local_env`, `is_placeholder`) | The build runner, and `scripts/ui_automation` (`resolve_toolchain` is imported by its CLI). |
 | [`scripts/toolchain-config.ps1`](../../../scripts/toolchain-config.ps1) (`Get-KsvToolchainConfig`, `Find-KsvToolchainLocalEnv`) | `package-release.ps1`. |
 
+CI is a third consumer of the key set, but it does not read the env files itself: it sets `KSV_TOOLCHAIN` and ten tool keys as process environment variables and runs the Debug runner, so the process-environment layer overrides the placeholders in the tracked files (see [Continuous integration](#continuous-integration)).
+
 The PowerShell file marks the shared rules with "Mirrors" comments (`find_local_env`, `resolve_flavour`, `is_placeholder`), and both accept the same key set. No equivalence test is established by this review, so a new toolchain key, a changed precedence step or a changed placeholder rule must be made in both files, in the three env files and in `BUILDING.md`. The Python side additionally accepts the runner keys `KSV_BUILD_JOBS` and `KSV_BUILD_PRIORITY`, which the PowerShell side tolerates in env files but does not use. The MinGW profile notes that Qt's `mingw_64` package is release-only, so Debug builds link optimized Qt.
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) runs on pushes to `main`, on pull requests and on manual dispatch, on `windows-2025`, with one run per ref (a newer push cancels the older run). It has two jobs.
+
+| Job | What it does |
+|---|---|
+| `build-and-test` (MinGW) | Installs Qt 6.12.0 (`win64_mingw`), CMake and Ninja through `install-qt-action`, downloads a SHA-256-verified winlibs MinGW (GCC 15.2.0, mingw-w64 14, msvcrt, posix threads), fetches vcpkg at a pinned commit and installs `protobuf` and `gtest` for `x64-mingw-dynamic` in classic mode, then runs `uv run python scripts/build_and_test.py` with no scope (full build and complete CTest suite) and `--scope qmllint` as a separate step. On failure it uploads `.temp/build-and-test/`. |
+| `script-tests` | Runs `uv run pytest` over `scripts/tests`. |
+
+What is pinned: the vcpkg commit (`VCPKG_COMMIT`), the winlibs release and its hash, the Qt version and an `aqtinstall` commit (a `TODO(2026-11-17)` in the workflow marks the return to a released `aqtinstall`). A comment asks that the vcpkg commit stay in step with the vcpkg used for local and release builds, naming `protobuf` 6.33.4, `abseil` 20260107.1 and `gtest` 1.17.0. Nothing enforces that and no manifest records it, so bumping either side alone makes CI test a different dependency set from the one shipped. The vcpkg binary-cache key includes the vcpkg commit, the triplet, the winlibs release and the run id, and only runs on `main` save it.
+
+CI reaches the toolchain keys through the process environment: the "Resolve toolchain paths" step writes `KSV_TOOLCHAIN=mingw` and ten tool keys to `GITHUB_ENV`. It does not set `KSV_VCPKG_TRIPLET`; that value comes from `toolchain.mingw.env` and equals the workflow's separately hard-coded `VCPKG_TRIPLET`, so changing one without the other diverges silently. The step also checks that the expected tool paths exist and prepends the winlibs directory to `PATH`, because the runner image has other GCCs that must not be used: the vcpkg `x64-mingw-dynamic` libraries load only against the runtime DLLs of the compiler that built them.
+
+CI does not cover:
+
+- the MSVC flavour;
+- a Release configuration, so the Release-only definitions and the GUI subsystem flag are unexercised there;
+- `package-release.ps1`, the smoke test and the zip.
+
+A change that breaks only one of those passes CI. Whether the workflow is a required status check is repository configuration and cannot be seen from the repository files.
 
 ## The build runner
 
@@ -169,7 +204,7 @@ The PowerShell file marks the shared rules with "Mirrors" comments (`find_local_
 
   The fingerprint (schema 3) records the flavour, option values, normalised tool paths and SHA-256 hashes of the CMake, Ninja and compiler executables, the MinGW runtime DLLs or `vcvars` script, the vcpkg toolchain file and `protoc`, every DLL in the vcpkg bin directory and every `.cmake` file under the Qt package directory. Consequently a change to a recorded path, setting or hashed file (a flavour switch, a new Qt CMake file, a vcpkg DLL, the protoc binary) rebuilds from scratch.
 
-  Replacing a Qt binary or a vcpkg header alone is not hashed and does not trigger a rebuild. The runner settings `KSV_BUILD_JOBS` (default 8) and `KSV_BUILD_PRIORITY` are outside the fingerprint.
+  The fingerprint does not hash a Qt binary or a vcpkg header, so replacing only one of those does not trigger a rebuild. It also excludes the runner settings `KSV_BUILD_JOBS` (default 8) and `KSV_BUILD_PRIORITY`.
 - **Cache validation.** After configure, `assert_cache` checks the generator, `Debug`, `BUILD_TESTING=ON`, `KSV_BUILD_GALLERY=ON` and the toolchain paths against the resolved toolchain, because CMake honours several of them only at first configure.
 - **Toolchain environment.** `_command_environment` prepends the compiler directory (MinGW only), the vcpkg bin directory and the Qt bin directory to `PATH` for every command, and for MSVC `process_environment_for` loads `INCLUDE`, `LIB` and `PATH` from `vcvars64.bat`. The runner passes `-DCMAKE_BUILD_TYPE=Debug` itself and does not read it from the environment.
 - **Machine-readable results.** Focused scopes run test executables directly, with their XML or Qt Test report; `--scope all` runs `ctest -j 4` with a JUnit report. Failures are expanded from those reports; the console is a fallback.
@@ -178,7 +213,7 @@ The runner knows its tests through [`catalog.py`](../../../scripts/build_runner/
 
 ## Windows runtime DLL placement
 
-Several MinGW toolchains can coexist on a machine, and the vcpkg `x64-mingw-dynamic` libraries (abseil, hence protobuf) can load only the runtime DLLs of the compiler that built them. The three runtime DLLs `libwinpthread-1`, `libgcc_s_seh-1` and `libstdc++-6` must come from the configured compiler and be the copies that resolve at process start. It is upheld in three places, which must agree:
+Several MinGW toolchains can coexist on a machine, and the vcpkg `x64-mingw-dynamic` libraries (abseil, hence protobuf) can load only the runtime DLLs of the compiler that built them. At process start, Windows must load the configured compiler's copies of `libwinpthread-1`, `libgcc_s_seh-1` and `libstdc++-6`. Three mechanisms enforce this requirement and must agree:
 
 - `ksv_copy_mingw_runtime_dlls` in the top-level file adds a `copy_if_different` post-build step that copies them from the directory of `CMAKE_CXX_COMPILER` next to a target. It is applied to `ksv`, the gallery, the driver and every test executable that links a layer above the domain. `domain_tests` is deliberately excluded because it links nothing above `ksv_domain`, and [`tests/support/CMakeLists.txt`](../../../tests/support/CMakeLists.txt) keeps its helper headers free of Qt and `ksv_data` for that reason. The function does nothing under MSVC.
 - The runner puts the compiler directory first on `PATH` for MinGW.
@@ -212,14 +247,16 @@ The smoke test is bypassed by `-SkipSmokeTest` and skipped with a warning if the
 - **Two toolchain readers move together.** `config.py` and `toolchain-config.ps1` must agree on keys, precedence, placeholder detection and worktree lookup. A key added to one only will work in the runner and fail in packaging, or the reverse.
 - **The Debug fingerprint is the cache contract.** Any new toolchain input that affects the produced binaries and is not hashed or recorded in `build_fingerprint` can leave a stale `build/script-build/` in use; any key added to the layering must be added to `TOOLCHAIN_KEYS` or it is rejected as unknown.
 - **The runtime DLL rule needs three places.** A new executable needs `ksv_copy_mingw_runtime_dlls`, and a new packaged dependency must be covered by the vcpkg bin copy and by the smoke test's module list to be proved present.
-- **Release-only changes need separate verification.** The Debug suite does not exercise the Release-only debug-output definition or GUI subsystem flag; the packaging smoke test does not check either directly. Changing them needs validation beyond those checks.
+- **Release-only changes need separate verification.** The Debug suite does not exercise the Release-only debug-output definition or GUI subsystem flag; the packaging smoke test does not check either directly, and CI runs neither. Changing them needs validation beyond those checks.
+- **CI and the local toolchain share keys and pins by hand.** A new or renamed toolchain key, or a new placeholder in a tracked env file, must also be set in the `GITHUB_ENV` step of `ci.yml`, or CI fails at resolution on a runner that has no local env file. The vcpkg commit and the triplet are hard-coded in the workflow and are not derived from the env files or from any local installation.
+- **The resource file stays free of defines and include paths.** The `windres` override discards both, so a `.rc` change that relies on either does not get them under MinGW.
 - **One version statement shape.** Reformatting the `project(... VERSION ...)` call so the regex in `version.ps1` misses it fails packaging, not the build; reformatting the suffix `set` silently drops the suffix from the package version while the build still compiles `KSV_VERSION` with it.
 
 ## Evidence and limitations
 
-Verified against source: the root `CMakeLists.txt` and every `CMakeLists.txt` under `src/`, `tests/` and `tools/`; `config.py`, `locking.py`, `catalog.py`, `cli.py` and the build, configure and test phases of `orchestrator.py`; the three tracked env files and the layering description in `toolchain.defaults.env`; `toolchain-config.ps1`, `version.ps1` and `package-release.ps1`; `BUILDING.md`; and the header includes cited in the enforcement table, checked with a source search. The UI automation scripts, `arch_doc.py` and `make_dummy_kovaaks.py` were read only to establish their roles. Test source was not read; the test topology rests on the `tests/**/CMakeLists.txt` files and the single header named in the enforcement table.
+Verified against source: the root `CMakeLists.txt` and every `CMakeLists.txt` under `src/`, `tests/` and `tools/`; `config.py`, `locking.py`, `catalog.py`, `cli.py` and the build, configure and test phases of `orchestrator.py`; the three tracked env files and the layering description in `toolchain.defaults.env`; `toolchain-config.ps1`, `version.ps1` and `package-release.ps1`; `BUILDING.md`; and the header includes cited in the enforcement table, checked with a source search. For the v1.1.0 pass I also read `.github/workflows/ci.yml` and `pyproject.toml` completely, and the icon, `windres` and `Svg` parts of the root `CMakeLists.txt`, `resources/app-icon/ksv.rc` and the `QML_IMPORT_PATH` block of `src/ui/CMakeLists.txt`. The UI automation scripts, `arch_doc.py`, `make_app_icon.py` and `make_dummy_kovaaks.py` were read only to establish their roles. Test source was not read; the test topology rests on the `tests/**/CMakeLists.txt` files and the single header named in the enforcement table.
 
-Not established: the parsers, failure rendering and process handling modules of the runner (`parsers.py`, `failures.py`, `diagnostics.py`, `process.py`, `qmllint.py`) were not read beyond their roles, so the claims about report-based failure output rest on the orchestrator. The contents of the `windeployqt` output (which Qt plugins and QML imports it copies) were not inspected, and neither were generated build artefacts, so the deployment table lists steps, not the zip's file inventory. Whether a cycle among static libraries or an upward symbol reference fails at link time is stated from general CMake behaviour and was not exercised. The Python and PowerShell toolchain implementations were compared by reading, not by running both on one input. The earlier implementation review built no package and inspected no Mermaid rendering. Both revised dependency diagrams were rendered and inspected.
+Not established: the parsers, failure rendering and process handling modules of the runner (`parsers.py`, `failures.py`, `diagnostics.py`, `process.py`, `qmllint.py`) were not read beyond their roles, so the claims about report-based failure output rest on the orchestrator. The contents of the `windeployqt` output (which Qt plugins and QML imports it copies) were not inspected, and neither were generated build artefacts, so the deployment table lists steps, not the zip's file inventory. Whether a cycle among static libraries or an upward symbol reference fails at link time is stated from general CMake behaviour and was not exercised. The Python and PowerShell toolchain implementations were compared by reading, not by running both on one input. CI behaviour is stated from the workflow file, not from a real run, and whether the CI vcpkg pin matches any local installation was not checked. The behaviour of MSVC `rc`, and whether `windeployqt` deploys `qsvg`, were not verified. The earlier implementation review built no package and inspected no Mermaid rendering. Both revised dependency diagrams were rendered and inspected.
 
 <!-- arch-doc:references:start -->
 [qml-boundary]: qml-boundary.md

@@ -1,6 +1,6 @@
 # KovaaksStatisticsViewer Architecture
 
-Documented version: v1.0.0
+Documented version: v1.1.0
 
 ## Purpose, audience, and scope
 
@@ -36,7 +36,7 @@ No key is needed: the boxes identify their types and the labelled arrows name di
 
 KSV reads local exports from the configured KovaaK's installations (`.perf` run files and stats `.csv` files under each install root's `FPSAimTrainer/performances` and `FPSAimTrainer/stats` folders) and a playlist file the player selects when seeding a benchmark. Image export writes to the operating-system clipboard through Qt or to a PNG path the player selects. KSV uses no network service. KovaaK's is the only external software system. Evidence: [`FileService`](../../src/qt_data/file_service.cpp), [`PlaylistReader`](../../src/qt_data/playlist_reader.cpp), [`QtClipboardImageWriter`](../../src/qt_data/qt_clipboard_image_writer.cpp).
 
-KSV owns everything it derives from the exports in local stores; [Owned data](#owned-data) lists them, [Run history data][run-history-data] covers the source-based Rebuild and migration enrichment that still read the exports, and [Benchmark definitions][benchmark-definitions] covers the definition files, which are their own recovery source and accept external edits on refresh. Evidence: [`FileService`](../../src/qt_data/file_service.cpp), [`PlaylistReader`](../../src/qt_data/playlist_reader.cpp), [`QtClipboardImageWriter`](../../src/qt_data/qt_clipboard_image_writer.cpp), [`App::App`](../../src/app/app.cpp).
+KSV owns everything it derives from the exports and keeps it in local stores, listed under [Owned data](#owned-data). [Run history data][run-history-data] explains how Rebuild and migration enrichment still read the source exports. [Benchmark definitions][benchmark-definitions] explains how definition files serve as their own recovery source and accept external edits on refresh. Evidence: [`FileService`](../../src/qt_data/file_service.cpp), [`PlaylistReader`](../../src/qt_data/playlist_reader.cpp), [`QtClipboardImageWriter`](../../src/qt_data/qt_clipboard_image_writer.cpp), [`App::App`](../../src/app/app.cpp).
 
 ## Architectural strategy and constraints
 
@@ -48,13 +48,13 @@ Change propagation uses two mechanisms, chosen by interface rather than by wheth
 
 Work leaves the GUI thread in exactly three places: profile imports run on the profile import thread (`SessionController`'s `m_build_thread` with a `ProfileBuildWorker`), capture rendering on a one-thread render pool, and PNG writing on a one-thread save pool. Each worker receives an owned value payload and returns its result to the GUI thread through a queued call. The GUI thread decides whether to accept an import candidate or a render result; PNG completion only reports a write that has already been attempted ([`ImageOutputUseCase::savePng`](../../src/app/usecases/image_output_use_case.cpp)). [Profile lifecycle][profile-lifecycle] owns the import hand-off and its acceptance gate; [Image capture][image-capture] owns capture's guarded contexts, cancellation, session and generation matching, and single-flight output; [Composition root][composition-root] owns what the process waits for at exit and the teardown of all three workers, imports included.
 
-The layer rule is a convention enforced at injected interface boundaries, not by the build. Every target sees the whole `src/` tree through a global include path, `ksv_contracts` and `src/data/interfaces` include each other's headers, and the composition root's library links the UI library. [Build and deployment][build-and-deployment] owns the physical picture and what does and does not catch a violation.
+The layer rule is a convention enforced at injected interface boundaries, not by the build. Every target sees the whole `src/` tree through a global include path, `ksv_contracts` and `src/data/interfaces` include each other's headers, and the composition root's library links the UI library. [Build and deployment][build-and-deployment] explains the target and header dependencies and which checks can and cannot catch a layer violation.
 
 ## Building blocks
 
 For maintainers deciding where a change belongs, this dependency diagram shows how presentation reaches application behavior and how application and data code use the domain and shared contracts.
 
-**Type:** top-level building-block dependency. **Scope:** the five responsibility groups that together make up the shipped process, each grouping classes and targets by responsibility, and every direct use between them. **Concern:** principal "uses" relationships, not target links, ownership, or individual calls.
+**Type:** top-level building-block dependency. **Scope:** the shipped process's five responsibility groups and every direct use of another group's services or domain values between them. Each group collects classes and targets with a shared responsibility. Uses of another group's value types through headers alone are described below the diagram. **Concern:** principal "uses" relationships, excluding target links, header inclusion, ownership and individual calls.
 
 ```mermaid
 ---
@@ -62,7 +62,7 @@ title: Direct dependencies among KSV responsibility groups
 ---
 flowchart TB
     accTitle: Direct dependencies among KSV responsibility groups
-    accDescr: Presentation uses Application, which uses Data and platform. Presentation, Application and Data and platform also use Shared contracts and Domain; Shared contracts uses Domain.
+    accDescr: Presentation uses Application, and Application uses Data and platform. These three groups use Shared contracts and Domain; Shared contracts also uses Domain.
     Presentation["Presentation"]
     Application["Application"]
     Data["Data and platform"]
@@ -92,7 +92,7 @@ flowchart TB
 | Shared contracts | Use-case interfaces, graph configuration and the expression DSL. |
 | Domain | Run identity, profile, benchmark model and evaluation. |
 
-The presentation-to-domain arrow is direct use of value types such as scenario and run identifiers and benchmark rank points. `SettingsViewModel` reaches the configured source root, profile path and profile state through `IProfileLocationsUseCase`, so no view model depends directly on a data-layer port, as [ADR 0004](decisions/0004-route-view-model-interactions-through-use-cases.md) requires; the record itself still lists the two former violations as current. [Composition root][composition-root] compares the direct dependencies of the session and capture view models. Evidence: [`settings_vm.h`](../../src/ui/presentation/app/settings_vm.h), [`ProfileLocationsUseCase`](../../src/app/usecases/profile_locations_use_case.h), [`App::App`](../../src/app/app.cpp).
+The presentation-to-domain arrow is direct use of value types such as scenario and run identifiers, the evaluated benchmark and its rank-history points. Presentation also reads data-layer benchmark value types (accepted and problem entries, edit tokens, save errors, migration failures) declared in `data/interfaces/benchmark_library_snapshot.h`, both through the contracts headers that embed them and directly in [`benchmark_format.h`](../../src/ui/presentation/benchmarks/benchmark_format.h); this is header vocabulary rather than a use of a data-layer service. Shared contracts likewise include data-layer benchmark headers, and a Qt adapter header includes an application interface. [Build and deployment][build-and-deployment] names the cross-layer header dependencies by target pair and states what the build does and does not catch. `SettingsViewModel` reaches the configured source root, profile path and profile state through `IProfileLocationsUseCase`, so no view model depends directly on a data-layer port, as [ADR 0004](decisions/0004-route-view-model-interactions-through-use-cases.md) requires; the record itself still lists the two former violations as current. [Composition root][composition-root] compares the direct dependencies of the session and capture view models. Evidence: [`settings_vm.h`](../../src/ui/presentation/app/settings_vm.h), [`ProfileLocationsUseCase`](../../src/app/usecases/profile_locations_use_case.h), [`App::App`](../../src/app/app.cpp).
 
 The build links the static libraries below into the `ksv` executable. [Build and deployment][build-and-deployment] describes their build dependencies.
 
@@ -112,7 +112,7 @@ The build links the static libraries below into the `ksv` executable. [Build and
 |---|---|---|
 | `profile.pb` (default under the application-data location; path configurable) | `ProfileService` via `ProfileSerializer` | The authoritative run history and failed-source ledger, as a versioned Protocol Buffers file. Once a run is accepted, `profile.pb` rather than its source exports is authoritative ([Run history data][run-history-data]). |
 | `benchmarks/` directory under the application-data location | `BenchmarksService` via `BenchmarkStore` | One versioned JSON definition per benchmark; the accepted library. |
-| `QSettings` (INI) | `SettingsService`, `GraphConfigurationPersistence` | Configured KovaaK's source roots, profile path, recent benchmark IDs, and the versioned graph-configuration JSON document with its quarantined copies. |
+| `QSettings` (INI) | `SettingsService`, `GraphConfigurationPersistence` | Configured KovaaK's source roots, profile path, recent benchmark filenames, and the versioned graph-configuration JSON document with its quarantined copies. Superseded keys (the single-root key, the legacy graph-line keys, and the former recent-benchmark ID keys) are left in place; the first two are still read as fallbacks. |
 | QML-owned `Settings` groups in the same production INI file | `VisualSettingsManager.qml`, `SettingsDialog.qml` | Window geometry, panel and graph visibility, per-series visibility, history-graph choices, settings-dialog placement; unversioned, with key groups disjoint from the C++ ones. |
 
 Each C++ store has one data-layer authority that alone decides what is accepted; where it holds state in memory it reaches storage through an injected port, and `SettingsService` is both authority and adapter ([ADR 0010](decisions/0010-one-data-layer-authority-for-each-body-of-persisted-state.md)). The QML-owned groups have no such authority (see [Known risks and debt](#known-risks-and-debt)).
@@ -143,7 +143,7 @@ Each C++ store has one data-layer authority that alone decides what is accepted;
 
 ### Benchmarks
 
-[Benchmarks][benchmarks] explains the benchmark subsystem: definitions owned by a data-layer service over a JSON store, joined to run history by an application use case, edited in presentation, and tracked against the profile. Consult it, and its children, before changing anything that crosses those parts; the accepted library and the editor's working copy are deliberately different objects.
+[Benchmarks][benchmarks] explains how the benchmark subsystem connects definitions, run history, evaluation, editing and tracking. A data-layer service owns the definitions over a JSON store, identified by filename. An application use case joins them to run history and is also the single change signal for benchmark tracking. The domain evaluates them into an immutable benchmark value, presentation edits them, and tracking compares them against the profile. Consult this view and its children before changing interactions between these parts. The accepted library and the editor's working copy are deliberately different objects, and evaluation depends on run facts arriving in chronological order.
 
 ### Image capture
 
@@ -151,13 +151,14 @@ Each C++ store has one data-layer authority that alone decides what is accepted;
 
 ### Build and deployment
 
-[Build and deployment][build-and-deployment] explains target boundaries, toolchain configuration and what ships. Consult it before changing targets, toolchain keys or packaging: toolchain resolution is implemented twice and the two must change together. KSV builds for Windows with C++20, CMake and Ninja against Qt and vcpkg-provided Protocol Buffers, using MinGW (default) or MSVC; GoogleTest is test-only. Release packaging produces a self-contained win64 ZIP.
+[Build and deployment][build-and-deployment] explains target boundaries, toolchain configuration and what ships. Consult it before changing targets, toolchain keys or packaging: toolchain resolution is implemented twice and the two must change together. KSV builds for Windows with C++20, CMake and Ninja against Qt and vcpkg-provided Protocol Buffers, using MinGW (default) or MSVC; GoogleTest is test-only. Release packaging produces a self-contained win64 ZIP. A GitHub Actions workflow builds and tests the MinGW Debug configuration on pinned tools; it does not build MSVC, Release or the package.
 
 ## Cross-cutting quality responses
 
 - **Responsiveness:** imports run on the profile import thread and capture rendering and PNG writing on their own one-thread pools ([Profile lifecycle][profile-lifecycle], [Image capture][image-capture]). Substantial work remains on the GUI thread: file listing scans on directory change, capture snapshots, accepting and saving import results, loading the stored profile at startup and on a profile-path change (including migrating and rewriting a version-3 file, see [Run history data][run-history-data]), and decoding a file opened directly. No latency target is established.
 - **Consistency:** a single gate accepts import results by token and generation, so results computed against replaced state are discarded ([Profile lifecycle][profile-lifecycle]); capture results are matched by session and generation in the same way ([Image capture][image-capture]).
 - **Persistence recoverability:** `profile.pb` and benchmark files are written atomically (temporary file then rename, or `QSaveFile`); unreadable profile and graph-configuration stores are quarantined (the profile rename is best effort; see [Run history data][run-history-data] and [Graph configuration][graph-configuration]), and unreadable or newer benchmark files are left untouched and reported ([Benchmark definitions][benchmark-definitions]).
+- **Stored-format compatibility:** the three versioned stores (`profile.pb`, benchmark definition files and the graph-configuration document) always write their current schema version, and each reader rejects a schema version newer than it supports, so a build that predates a schema bump cannot read files written after it. Other `QSettings` keys and the QML-owned groups carry no schema version. How older versions are upgraded differs per store, measured against [ADR 0011](decisions/0011-older-stored-formats-are-migrated-outside-current-format-code.md) and its amendments [ADR 0012](decisions/0012-migrations-produce-current-stored-data-never-the-in-memory-model.md) and [ADR 0013](decisions/0013-migrations-upgrade-stored-data-one-version-at-a-time.md): benchmark definitions conform, with one JSON-to-JSON step per version run on scan ([Benchmark definitions][benchmark-definitions]); the run profile migrates outside its current-format reader but its one migrator builds the in-memory profile ([Run history data][run-history-data]); graph configuration upgrades older documents inside its current-format codec, and superseded settings keys are read inline ([Graph configuration][graph-configuration]).
 - **Testability:** `App` takes selected I/O dependencies through an injected constructor so integration tests and the gallery can drive the real object graph with deterministic paths. Use cases depend on interfaces, and per-layer tests use fakes from `tests/support`. [Composition root][composition-root] lists what is injected.
 - **Local data ownership:** all history, definitions, and configuration live in local files; nothing is sent anywhere.
 
@@ -166,29 +167,32 @@ Each C++ store has one data-layer authority that alone decides what is accepted;
 - The `.perf` schema has fields whose meaning is unknown; a format change by KovaaK's needs decoder investigation. Stats CSV parsing encodes several game-version-specific layouts.
 - KovaaK's folder layout and filename conventions constrain discovery, pairing, and migration enrichment. A layout change can silently hide exports or prevent matching files from pairing. [Run history data][run-history-data] describes the assumptions.
 - A Rebuild starts from an empty profile and is always treated as a change, so runs whose source files have been moved or deleted are dropped, and a Rebuild while a configured source root is unavailable saves a history that omits that root's runs (empty if no other input contributes) over `profile.pb` ([Run history data][run-history-data]). The UI warns before a manual Rebuild.
-- Shutdown waits for an in-flight import and an in-flight PNG save; neither is cancellable ([Composition root][composition-root]).
-- The build does not enforce layer rules: global include visibility permits cross-layer includes, and the current dependencies include mutual headers between `ksv_contracts` and `src/data/interfaces` and a header-only `ksv_ui` dependency on `ISessionController`.
-- QML type registration depends on include directories for the generated registrar and, for types nothing else references, on the manual list; omissions fail silently at runtime.
-- QML-owned UI settings are unversioned, and the set of graph keys is duplicated between C++ and `GraphCatalog.js`.
+- Shutdown waits for an in-flight import, an in-flight PNG save and a running capture render; only the render is cooperatively cancellable, and none of the waits has a timeout ([Composition root][composition-root]).
+- The build does not enforce layer rules: global include visibility permits cross-layer includes, and the current dependencies include mutual headers between `ksv_contracts` and `src/data/interfaces`, a header-only `ksv_ui` dependency on `ISessionController`, `ksv_ui` headers that include data-layer benchmark value types, and a `ksv_qt_data` header that includes `ISessionController`.
+- QML type registration depends on include directories for the generated registrar and, for types nothing else references, on the manual list; omissions fail silently at runtime. Registered C++ types are also used as QML property types, so a dropped registration breaks those properties too ([QML boundary][qml-boundary]).
+- QML-owned UI settings are unversioned. Graph keys, and for the settings window also axis, series, group and field names, are duplicated between C++ and `GraphCatalog.js`; a missing entry degrades labels and ordering without an error.
 - Graph-configuration persistence reports no failure, so the in-memory configuration can move ahead of the stored one, contrary to ADR 0010.
 - QML-owned `Settings` groups are persisted state with no data-layer authority, a departure from ADR 0010 ([QML boundary][qml-boundary]).
-- Tools are not provisioned and dependency versions are machine-provided and unpinned (there is no vcpkg manifest); [Build and deployment][build-and-deployment] states what the Debug build fingerprint covers.
+- Older stored formats are not all migrated outside current-format code: graph configuration and superseded settings keys are upgraded inline, and the run profile's migrator builds the in-memory model, contrary to ADRs 0011 and 0012 (see Stored-format compatibility above).
+- The benchmark table's image capture re-implements the on-screen grid layout in C++; a parity test checks the captured text and its order, not geometry, so a layout change made on one side only can make the image differ from the screen ([Image capture][image-capture]).
+- Local and release builds use machine-provided, unpinned tools and dependencies (there is no vcpkg manifest). CI pins its own vcpkg commit, compiler and Qt version, kept in step with the local install by hand; [Build and deployment][build-and-deployment] states what CI checks and what the Debug build fingerprint covers.
 
 ## Decision and design context
 
 [Decision records](decisions/) hold the rationale for architecturally significant choices; this description states the as-built structure and links them where relevant. Where the implementation and a record disagree, the views say so.
 
 - [Application interface and implementation placement](decisions/0001-application-interface-and-implementation-placement.md): contracts versus use cases.
-- [Embedded stable identity for benchmark elements](decisions/0002-embedded-stable-identity-for-benchmark-elements.md): benchmark element identity.
+- [Embedded stable identity for benchmark elements](decisions/0002-embedded-stable-identity-for-benchmark-elements.md), amended by [A benchmark's filename is its identity](decisions/0014-a-benchmarks-filename-is-its-identity.md): embedded opaque IDs for tiers, groups and scenario entries; the benchmark itself is identified by its filename, with only a per-session in-memory key ([Benchmark definitions][benchmark-definitions]).
 - [Route view-model interactions through use cases](decisions/0004-route-view-model-interactions-through-use-cases.md): view models through use cases.
 - [Presentation-owned capture snapshots and application-owned output](decisions/0007-presentation-owned-capture-snapshots-and-application-owned-output.md): captures.
 - [No background writes to an entity under edit](decisions/0008-no-background-writes-to-an-entity-under-edit.md): background writes while the benchmark editor is open.
 - [Graph configuration is one snapshot](decisions/0009-graph-configuration-is-one-snapshot.md): the unit of graph configuration.
 - [One data-layer authority for each body of persisted state](decisions/0010-one-data-layer-authority-for-each-body-of-persisted-state.md): ownership of persisted state, superseding [ADR 0005](decisions/0005-data-owned-benchmark-service-and-presentation-drafts.md) and [ADR 0006](decisions/0006-unified-graph-configuration-and-presentation-drafts.md) (ADR 0005 had superseded [ADR 0003](decisions/0003-profile-independent-benchmark-repository-and-application-owned-state.md)).
+- [Older stored formats are migrated outside current-format code](decisions/0011-older-stored-formats-are-migrated-outside-current-format-code.md), amended by [Migrations produce current stored data, never the in-memory model](decisions/0012-migrations-produce-current-stored-data-never-the-in-memory-model.md) and [Migrations upgrade stored data one version at a time](decisions/0013-migrations-upgrade-stored-data-one-version-at-a-time.md): where and how stored formats are upgraded; conformance per store is under Stored-format compatibility above.
 
 ## Evidence and limitations
 
-The views were rebuilt on 2026-11-10 from a survey of `src/`, the build files and the scripts, not from earlier versions of this description. Each view's Evidence and limitations section identifies the files inspected and any gaps in its coverage. Claims cite source paths and symbols; thread affinity and destruction order on shutdown are partly inferred from C++ and Qt rules rather than observed at runtime. Test source was used mainly to establish topology, and in some views to confirm behavioural contracts or the substitute-object mechanics of QML tests; it was not run. Several ADRs link files that no longer exist, and ADR 0004's statement of current state is out of date; the views note this where it matters.
+The description was refreshed on 2026-11-25 against v1.1.0: the code areas changed since v1.0.0 were surveyed again and every view checked against them, and views whose code has not changed since v1.0.0 were re-confirmed by that absence of change rather than re-derived. Each view's Evidence and limitations section identifies the files inspected and any gaps in its coverage. Claims cite source paths and symbols; thread affinity and destruction order on shutdown are partly inferred from C++ and Qt rules rather than observed at runtime. Test source was used mainly to establish topology, and in some views to confirm behavioural contracts or the substitute-object mechanics of QML tests; it was not run. Several ADRs link files that no longer exist, and ADR 0004's statement of current state is out of date; the views note this where it matters.
 
 <!-- arch-doc:references:start -->
 [benchmark-definitions]: views/benchmark-definitions.md

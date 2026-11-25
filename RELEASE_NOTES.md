@@ -2,6 +2,37 @@
 
 What's new for people using the app. For the technical record, see [CHANGELOG.md](CHANGELOG.md).
 
+## v1.1.0
+
+### Features & changes
+
+#### Graphing
+- The scenario history graph labels its runs with dates instead of run numbers; hovering shows the run's date and time and its run number.
+- The benchmark rank graphs now zoom to the ranks in view instead of always showing every tier. A new Vertical fit setting switches back to the full scale, and Round to whole tiers chooses whether the axis stops at tier boundaries or shows progress percentages.
+
+#### Benchmarks
+- The benchmark rank graphs now space your runs evenly by default, with dates along the axis, so busy days get room and idle weeks don't. Switch either graph back to calendar dates in Settings → Graphs → Axes.
+- Benchmark files are now named after their benchmarks, so a shared or copied file shows up under its filename. Existing benchmarks are renamed automatically; renaming a benchmark renames its file, and the editor explains why a name can't be used before you save.
+- In the benchmark table, when space is short, a group's rank badge moves under its name, and long category and subcategory names then wrap onto more lines, instead of the tier bars being squeezed. Scenario names no longer keep an empty gap in front of them when no scenario row is marked.
+- Manage Benchmarks now lives in the File menu, and the separate Benchmarks menu is gone.
+- When a subcategory holds back your next tier, it is now marked once on the subcategory, with a hint naming its closest scenario, instead of on every scenario in it.
+- The line on the summary's average-rank bar now marks your recent average rank, as it does on the scenario rows, instead of your completed rank.
+
+#### Settings
+- Axis choices in graph settings are now selectable cards with a radio marker — click anywhere on a card to pick that axis — and deleting a shared axis uses a trash button.
+
+#### User Interface
+- KovaaksStatsViewer now has its own icon, a rising line chart, in place of the generic Windows one on the title bar, the taskbar and the .exe.
+
+### Bug fixes
+- In an incomplete benchmark where two rows are linked to the same played scenario, total playtime now counts that scenario's runs once for each row.
+- When the same scenario is matched to multiple benchmark rows, the benchmark playtime graph now counts each run once for each of those rows. With "End date ranges at latest recorded run" enabled, recent-day ranges on that graph end on the last day you played a scenario that contributes to the benchmark.
+- With "End date ranges at latest recorded run" on, the personal-best rank graph now ends at your latest run, holding your best flat through the runs since you last improved.
+- On the benchmark progress grid, a scenario whose tier thresholds are missing or out of order now describes its score as "thresholds incomplete" instead of guessing a tier from the usable part.
+- The recent-average marker in the progress grid now also shows for scenarios whose thresholds are incomplete.
+- The "blocked by" count now counts what you actually have left to clear.
+- The Settings page now notices when your KovaaK's folder becomes valid, for example after your first run there, without you choosing the folder again.
+
 ## v1.0.0
 
 ### Features & changes

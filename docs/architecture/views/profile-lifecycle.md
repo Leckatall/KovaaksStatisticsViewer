@@ -27,13 +27,13 @@ This view follows startup and profile-path loads, and background imports from re
 | `FileService` (`ksv_qt_data`) | GUI thread for watching; its stateless read methods are also called from the profile import thread | Watches the folders under the configured KovaaK's source roots and reports that something arrived; updates its pending-file set when an import is acknowledged. |
 | `ProfileSerializer` | GUI thread, called by `ProfileService` | Persists the accepted candidate. Its file format is [Run history data][run-history-data]'s concern. |
 
-`SessionController` constructs a `ProfileBuildWorker` around the same `ProfileImporter` instance that `ProfileService` holds, and moves it to that profile import thread, which is distinct from the capture render pool and the PNG save pool ([`SessionController` constructor](../../../src/app/session_controller.cpp), [`App::App()`](../../../src/app/app.cpp)). The worker reads files only through `FileService::scanSources`, `getPerfFromFile` and `getStatsFromFile`. These methods leave watcher state untouched ([`FileService`](../../../src/qt_data/file_service.cpp)). The worker and GUI thread share the `FileService`, decoder, and parser instances.
+`SessionController` constructs a `ProfileBuildWorker` using the same `ProfileImporter` instance that `ProfileService` holds. It moves the worker to the profile import thread, separate from the capture render pool and PNG save pool ([`SessionController` constructor](../../../src/app/session_controller.cpp), [`App::App()`](../../../src/app/app.cpp)). The worker reads files only through `FileService::scanSources`, `getPerfFromFile` and `getStatsFromFile`. These methods leave watcher state untouched ([`FileService`](../../../src/qt_data/file_service.cpp)). The worker and GUI thread share the `FileService`, decoder, and parser instances.
 
 ## The import protocol
 
 An import has a **mode** and a **reason** ([`profile_import.h`](../../../src/app/contracts/profile_import.h)).
 
-- **Refresh** merges newly eligible input into a copy of the accepted profile: it reads only files the profile does not already account for. A missing source file never removes a run.
+- **Refresh** merges newly eligible input into a copy of the accepted profile: it reads only files the profile does not already account for and whose path has no session alias. A missing source file never removes a run. Aliases survive an accepted Rebuild, so Refresh eligibility is not solely a function of the current profile; [Run history data][run-history-data] describes alias lifetime.
 - **Rebuild** discards the baseline's content: the candidate starts empty, every file is read again, and the result always counts as changed ([`ProfileImporter::run`](../../../src/data/profile_importer.cpp)).
 - The reasons are `Startup`, `Manual`, `Live`, `SourceSettingsChanged` and `Retry`.
 
@@ -84,7 +84,7 @@ sequenceDiagram
 
 The worker computes the result in the interval between `buildRequested` and `finished`. `SessionController` registers its own `onProfileChanged` callback, which is suppressed by `m_accepting` during `acceptImport`. Alias updates and watcher acknowledgement remain inside acceptance, as shown in the gate table below.
 
-`ProfileService::acceptImport` checks the result before saving, committing, acknowledging source files, and notifying subscribers ([`ProfileService::acceptImport`](../../../src/data/profile_service.cpp)). The worker's `finished` signal means "an import result is ready", not "the history changed" and not "a candidate exists": a no-op result has no candidate yet can still update aliases and the watcher's pending set, and a result that is stale, failed, or cannot be saved leaves the accepted profile exactly as it was.
+`ProfileService::acceptImport` checks the result before saving, committing, acknowledging source files and notifying subscribers ([`ProfileService::acceptImport`](../../../src/data/profile_service.cpp)). The worker's `finished` signal means only that an import result is ready. A no-op result has no candidate but can still update aliases and the watcher's pending set. A stale result, a failed result or a failed save leaves the accepted profile unchanged.
 
 ## Triggers
 
@@ -98,7 +98,7 @@ A file stays pending until an accepted import names it as successful, a later re
 
 When the profile-store path changes, `ProfileService` reloads from the new path through the same `loadProfile` entry point, so the startup rules above apply again: a successful load is followed by a Refresh with reason `Startup`, a missing file by a Rebuild. A path change immediately changes the save destination. If loading the new path returns a `ProfileLoadError`, the previous snapshot stays visible until a Rebuild is accepted. If saving the Rebuild result fails, the previous snapshot stays visible under the new path setting. The previous file is left where it was ([`ProfileService::applyProfilePath`](../../../src/data/profile_service.cpp), [`SettingsService`](../../../src/qt_data/settings_service.cpp)).
 
-This recovery covers returned load errors only: `applyProfilePath` assigns the new path and then calls the throwing `std::filesystem::create_directories`, and `ProfileSerializer::load` uses the throwing `exists`, so a filesystem exception escapes the settings callback with the destination already changed and without requesting a Rebuild ([`ProfileService::applyProfilePath`](../../../src/data/profile_service.cpp), [`ProfileSerializer::load`](../../../src/data/formats/protobuf/profile_serializer.cpp)).
+Filesystem exceptions bypass this recovery, which covers returned load errors only. `applyProfilePath` assigns the new path before calling the throwing `std::filesystem::create_directories`; `ProfileSerializer::load` also uses the throwing `exists`. If either call throws, the exception escapes the settings callback after the save destination has changed, and no Rebuild is requested ([`ProfileService::applyProfilePath`](../../../src/data/profile_service.cpp), [`ProfileSerializer::load`](../../../src/data/formats/protobuf/profile_serializer.cpp)).
 
 **Manual.** The refresh actions in the menu and settings dialog call `SessionController::refreshProfile` with reason `Manual`; the rebuild action is described above.
 
@@ -148,7 +148,7 @@ The selection-revision counter is what makes the `Startup` rule work: `SessionCo
 
 The `m_accepting` flag exists because `ProfileService` notifies its callbacks *inside* `acceptImport`, and `SessionController` is itself a subscriber. While `m_accepting` is set, the controller ignores its own profile callback. Without the flag, that callback would run before the reason-aware refresh: it would attempt to select the latest run, bump the selection revision and emit an extra `profileChanged`. The early revision bump would defeat the `Startup` rule; the equality guard could still retain the old payload when the latest run has the same id. Other callback subscribers run inside `acceptImport`, before `SessionController` updates the current run; they must not assume the current run has already moved. The fan-out of `currentRunChanged` and `profileChanged` is [Run selection and rendering][run-selection-and-rendering]'s account.
 
-The same callback is free of this guard for `setProfile` (a stored profile loaded at startup or after a profile-path change), where it attempts to select the latest run. That reselection goes through the equality-guarded `setCurrentRun`, a different guard, so a latest run with the same id as the current one leaves the old payload in place. [Composition root][composition-root] owns the load-path notification order.
+When `setProfile` loads a stored profile at startup or after a profile-path change, `m_accepting` does not suppress the callback. The callback attempts to select the latest run through `setCurrentRun`, whose equality guard leaves the old payload in place if the latest run has the current run's id. [Composition root][composition-root] owns the load-path notification order.
 
 ## Shutdown during a build
 
@@ -167,6 +167,8 @@ The consequence for this protocol is that the result of an import still running 
 ## Evidence and limitations
 
 Verified by reading `src/data/profile_service.{h,cpp}`, `src/data/profile_importer.cpp`, `src/data/run_ingestor.cpp`, `src/app/session_controller.{h,cpp}`, `src/app/profile_build_worker.{h,cpp}`, `src/app/contracts/profile_import.h`, `src/qt_data/file_service.{h,cpp}`, `src/qt_data/settings_service.cpp`, and the wiring in `App::App()`. The sequence diagram and the tables were written from that code; the diagram was rendered and inspected at documentation width.
+
+Re-confirmed at v1.1.0: `git diff fe6f50d..HEAD` shows no change to `profile_service.{h,cpp}`, `profile_importer.cpp`, `run_ingestor.cpp`, `session_controller.cpp`, `profile_build_worker.cpp`, `contracts/profile_import.h` or `qt_data/file_service.{h,cpp}`. `settings_service.cpp` changed only in its benchmark settings keys, not in the profile-path handling this view relies on, and `App::App()` gained wiring for the profile-locations use case, which sits between the settings view model and `ProfileService` and does not alter the import protocol. `ProfileService` still subscribes to `onProfilePathChanged` itself. The account above is otherwise unchanged.
 
 Not established: the Qt connection types for the signals `SessionController` emits (this view treats their delivery as GUI-thread and does not rely on queuing); the behaviour of the QML consumers of `profileImportStateChanged`; and whether `FileService`'s GUI-thread directory scan in `refreshWatches` is a practical stall for very large folders. `IProfileService::abandonImport` exists and clears an active token but has no caller in `src/` outside `ProfileService` itself (found by search, not by call-graph analysis), so it is not part of the protocol described here. Tests under `tests/data` and `tests/integration` were not read or run for this view. No ADR in `docs/architecture/decisions/` addresses the import protocol, so none is linked.
 

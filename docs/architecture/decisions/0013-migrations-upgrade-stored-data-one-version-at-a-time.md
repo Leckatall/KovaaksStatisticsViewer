@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-11-22
 amends:
-  - 0011
+  - '0011'
 ---
 
 # 0013: Migrations upgrade stored data one version at a time

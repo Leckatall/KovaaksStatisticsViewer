@@ -55,3 +55,7 @@ generated at runtime.
 ## Links
 
 - [Scenario benchmark tracking design](../../features/benchmarks/design.md)
+
+## Amendments
+
+- 2026-11-25: Amended by [ADR-0014](0014-a-benchmarks-filename-is-its-identity.md). Makes a benchmark's filename its identity; element identity (tiers, groups, scenario entries) is unchanged.

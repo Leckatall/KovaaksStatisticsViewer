@@ -2,7 +2,7 @@
 status: accepted
 date: 2026-11-22
 amends:
-  - 0011
+  - '0011'
 ---
 
 # 0012: Migrations produce current stored data, never the in-memory model

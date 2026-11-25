@@ -4,6 +4,73 @@ The technical record — every change, user-visible or not. For the user-facing 
 [RELEASE_NOTES.md](RELEASE_NOTES.md). Pending entries live as fragments in `changelog.d/` and are
 assembled into both files at version bump.
 
+## v1.1.0
+
+### Added
+
+#### Graphing
+- Benchmark rank graphs zoom to the ranks in view: a new `rank` vertical axis (default fit-visible-data, no fixed bounds because tier counts differ per benchmark) plus graph-level `tierRounding` (`both`/`above`/`below`/`off`) control whether the axis stops at tier boundaries or shows progress percentages. Graph configuration moves to schema 8; older rank sections get the defaults and are not quarantined.
+- Graphs can offer a choice of horizontal axis: `GraphAxisDescriptor` gains an orientation and an optional policy, and the two rank graphs gain `runs` and `calendar` x axes with `GraphPreferences::xAxis` (default `runs`). Configuration schema 7 stores it; older documents load with the default.
+
+#### Benchmarks
+- Benchmark rank graphs space runs evenly by default via the new `RunDateAxis`, with dates along the axis and a `Run: #N` hover row; calendar dates remain selectable in Settings. Per-run rank histories back it, and `BenchmarkHistoryViewModel` now owns both axes. Captures of a run-axis graph are titled `Date (runs counted in order)`.
+
+#### Build & packaging
+- GitHub Actions CI on `windows-2025` for pushes to `main`, pull requests and manual runs: a pinned Qt 6.12.0 MinGW and vcpkg toolchain, with a vcpkg binary cache on a rolling key saved only from `main` when the package set changes, runs `scripts/build_and_test.py` and the qmllint scope, plus a separate `scripts/tests` job.
+- UI-driver tooling for synthetic profiles: modelled scenario entries (scenario-spec and performance-spec references, `idealScore`, `skill`/`progression`, `handRuns`) with deterministic, platform-independent generation, the real Viscose Intermediate S1 benchmark fixture, and a `showcase` tour that produces the README screenshots.
+
+#### User Interface
+- The app has its own icon (a rising line chart), embedded as a Windows resource so every window, the taskbar and the `.exe` use it. windres compiles it without defines or include directories, so toolchain paths with spaces build.
+
+#### Documentation
+- README rewritten for players, with build instructions moved to a new `BUILDING.md` and the project licensed under MIT.
+
+### Changed
+
+#### Graphing
+- The scenario history graph labels runs with dates instead of run numbers, with the time and run number on hover. `ValueTransform` is renamed `ValueDelegate` with a separate hover formatter so tick and hover labels can differ.
+
+#### Benchmarks
+- Benchmark files are named after their benchmarks: the filename is the identity, stored files move to schema 3 without `id` and `name`, and older files are migrated one version at a time and renamed on scan. Renaming a benchmark renames its file, and the editor explains an unusable name before saving.
+- Benchmarks are evaluated once into a domain `Benchmark` value (scenario and group evaluations, rank histories, rolling playtime) that the tracking use case publishes and the progress grid and tracking view model read, replacing the projection types. Re-evaluation happens only when the resolution use case signals a change.
+- Rank blockers model one unmet requirement (a subcategory, a category without subcategories, or an uncategorised scenario), so a blocking subcategory is marked once on its group cell, with a hint naming its closest scenario, instead of on every scenario in it.
+- The summary's average-rank bar marks the recent average rank (`Benchmark::recentAverageRank()`) instead of the completed rank, with fractional positioning and a table capture that matches.
+- The benchmark table moves a group's rank badge under its name when space is short, wraps long group names, and reserves the marker slot before scenario names only while some row blocks.
+- Manage Benchmarks moves to the File menu and the separate Benchmarks menu is removed.
+- Definition and group code is consolidated: `BenchmarkDefinition` gains shared `entries()`, `groups()`, `scenarioLists()` and lookup helpers over a common `BenchmarkGroup` base, `ScenarioEntry` becomes `BenchmarkScenario`, `evaluateBenchmark` is split into named phases, and `ScenarioEvaluation` owns per-run PB and recent-average series.
+
+#### Settings
+- Axis choices in graph settings are selectable cards with a radio marker, and deleting a shared axis uses a trash button.
+
+#### Build & packaging
+- Every build tree lives under the git-ignored `build/` directory, and the tracked toolchain env files hold `<...>` placeholders with a new ignored per-flavour local layer for machine paths.
+
+#### Architecture
+- The Architecture Description is rebuilt at v1.0.0 and refreshed at v1.1.0: new `benchmark-evaluation` view, stored-format compatibility response, updated risks, and views brought in line with the code.
+- ADRs are restructured and extended: persisted-state authority (0008-0010) supersedes 0005 and 0006, 0011-0013 settle migration separation and shape, and 0014 records that a benchmark's filename is its identity (amending 0002).
+
+#### User Interface
+- Untyped QML `var` properties are replaced with concrete types where one exists, so qmllint and qmlls can check them; `BenchmarkTableModel` and `GraphViewModelBase` become named uncreatable types.
+
+#### Documentation
+- Architecture and ADR conventions gain viewpoints, a documented-version line, decision-form and amendment rules, and diagram title and key rules, enforced by `scripts/arch_doc.py`.
+- README leads with the non-affiliation disclaimer and showcase screenshots, and its overview graphs hide cumulative Score.
+
+### Fixed
+
+#### Benchmarks
+- Rows linked to the same played scenario now count its runs once per row in both total and benchmark playtime, and with the end-at-latest-run option, recent-day playtime ranges end on the last day a scenario contributing to the benchmark was played.
+- With ranges anchored at the latest run, the personal-best rank graph now runs through to the latest member run, holding the best level flat, instead of stopping at the last personal best.
+- A scenario with a missing or out-of-order threshold ladder is described as "thresholds incomplete" instead of being given a tier guessed from the usable part.
+- The progress grid's recent-average marker now shows for scenarios with incomplete threshold ladders, where it used to be missing; the marker has an explicit show flag.
+- The "blocked by" count counts unmet requirements rather than every non-attaining scenario in them, so a subcategory that any one of its scenarios would clear no longer counts several times.
+
+#### Settings
+- The Settings page notices when the KovaaK's folder becomes valid (for example after the first run there); before, it stayed invalid, with Refresh Profile disabled and the invalid-folder banner shown, until the app restarted. Validity now comes from the new `IProfileLocationsUseCase`, which also retires the last view-model access to data-layer services.
+
+#### Build & packaging
+- IDE QML code models resolve the project's types again by caching `QML_IMPORT_PATH` at the module's parent directory.
+
 ## v1.0.0
 
 ### Added
