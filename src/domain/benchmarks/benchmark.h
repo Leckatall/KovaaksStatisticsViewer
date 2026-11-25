@@ -118,6 +118,8 @@ namespace ksv::domain {
         [[nodiscard]] const std::vector<RankBlocker> &nextTierBlockers() const;
         [[nodiscard]] int scenariosAtNextTier() const;
         [[nodiscard]] std::optional<double> averageRank() const;
+        /// Where recentAverageRankHistory() ends; none without a member run.
+        [[nodiscard]] std::optional<double> recentAverageRank() const;
         [[nodiscard]] const std::vector<AverageRankAfterRun> &averageRankHistory() const;
         [[nodiscard]] const std::vector<AverageRankAfterRun> &recentAverageRankHistory() const;
         /// The start of benchmark run `n` at index `n - 1`; filled only when the histories are.

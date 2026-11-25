@@ -577,13 +577,14 @@ Item {
             verify(attained !== completed, "attained and completed rank must be distinct elements")
         }
 
-        // the average rank is drawn on the tier bar, with the completed rank as a tick
-        // and the tier and progress in the tooltip.
-        function test_summaryAverageRankIsATierBarWithACompletedRankTick() {
+        // the average rank is drawn on the tier bar, with the recent average as the marker
+        // the progress rows use, and the tier and progress in the tooltip.
+        function test_summaryAverageRankIsATierBarWithARecentAverageMarker() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.averageRank = "Silver · 75% to Gold"
             fx.averageRankFills = [1, 1, 0.75, 0]
-            fx.completedRankPosition = 2      // Silver, the second tier: the end of its chunk
+            fx.recentAverageRankPosition = 1.6
+            fx.recentAverageRank = "Bronze · 60% to Silver"
             const ws = makeWorkspace(fx)
             wait(0)
             const area = find(ws, "summaryAverageRank")
@@ -595,14 +596,13 @@ Item {
                 const fill = find(bar, bar.objectName + "_fill_" + i)
                 fuzzyCompare(fill.width, chunk.width * fx.averageRankFills[i], 1, "chunk " + i)
             }
-            const tick = find(bar, bar.objectName + "_tick")
-            verify(tick.visible, "the completed rank is ticked")
-            const tickX = tick.mapToItem(ws, tick.width / 2, 0).x
-            const silverEnd = find(bar, bar.objectName + "_chunk_1")
-            const goldStart = find(bar, bar.objectName + "_chunk_2")
-            verify(tickX >= silverEnd.mapToItem(ws, silverEnd.width, 0).x - 1
-                   && tickX <= goldStart.mapToItem(ws, 0, 0).x + 1, "the tick sits at the end of Silver's chunk")
-            compare(tick.ToolTip.text, "Completed rank: Silver")
+            const marker = find(bar, bar.objectName + "_marker")
+            verify(marker !== null && marker.visible, "the recent average is marked")
+            const markerX = marker.mapToItem(ws, marker.width / 2, 0).x
+            const bronze = find(bar, bar.objectName + "_chunk_1")
+            fuzzyCompare(markerX, bronze.mapToItem(ws, 0.6 * bronze.width, 0).x, 1,
+                         "the marker sits 60% into Bronze's chunk, not on a tier boundary")
+            compare(marker.Accessible.name, "Recent average rank: Bronze · 60% to Silver")
             compare(area.ToolTip.text, "Average rank: Silver · 75% to Gold",
                     "the tier and progress are in the tooltip, not the bare number")
             compare(area.Accessible.name, "Average rank: Silver · 75% to Gold")
@@ -617,14 +617,15 @@ Item {
                       + completed.mapToItem(summary, 0, 0).x + " of " + summary.width)
         }
 
-        function test_summaryWithoutACompletedRankHasNoTick() {
+        function test_summaryWithoutARecentAverageHasNoMarker() {
             const fx = TestDoubles.trackingFixtureTrackable()
             fx.averageRankFills = [0.87, 0, 0, 0]
-            fx.completedRankPosition = -1
+            fx.recentAverageRankPosition = -1
+            fx.recentAverageRank = ""
             const ws = makeWorkspace(fx)
             const bar = find(ws, "summaryAverageRankBar")
-            const tick = find(bar, bar.objectName + "_tick")
-            verify(tick === null || !tick.visible, "nothing completed, no tick")
+            const marker = find(bar, bar.objectName + "_marker")
+            verify(marker === null || !marker.visible, "nothing played, no marker")
         }
 
         function blockerMarkers(ws) {

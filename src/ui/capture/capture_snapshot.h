@@ -57,7 +57,8 @@ namespace ksv::ui {
         QString completedRankColor;
         QString averageRank;
         std::vector<double> averageRankFills;
-        double completedRankPosition = 0.0;
+        // -1 without a recent average: 0 is a real position, the bar's start.
+        double recentAverageRankPosition = -1.0;
         QString totalPlaytime;
         QString nextTier;
         QString nextTierColor;

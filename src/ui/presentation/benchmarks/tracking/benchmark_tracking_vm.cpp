@@ -249,6 +249,9 @@ namespace ksv::presentation {
         const QString unavailableText = tr("Unavailable");
         const auto averageRank = benchmark ? benchmark->averageRank() : std::nullopt;
         const auto completedRank = benchmark ? benchmark->completedRank() : std::nullopt;
+        const auto recentAverageRank = benchmark ? benchmark->recentAverageRank() : std::nullopt;
+        m_recentAverageRankPosition = -1.0;
+        m_recentAverageRank.clear();
         if (trackable && benchmark) {
             resolveTier(benchmark->attainedRank(), tr("Unranked"), m_attainedRank, m_attainedRankColor);
             resolveTier(completedRank, tr("None completed"), m_completedRank, m_completedRankColor);
@@ -257,6 +260,10 @@ namespace ksv::presentation {
             tierNames.reserve(rankTiers.size());
             for (const auto &tier: rankTiers) tierNames.push_back(tier.name);
             m_averageRank = averageRank ? describeAverageRank(*averageRank, tierNames) : unavailableText;
+            if (recentAverageRank) {
+                m_recentAverageRankPosition = *recentAverageRank;
+                m_recentAverageRank = describeAverageRank(*recentAverageRank, tierNames);
+            }
         } else {
             m_attainedRank = unavailableText;
             m_completedRank = unavailableText;
@@ -267,16 +274,12 @@ namespace ksv::presentation {
             m_nextTierColor.clear();
         }
         // The summary's average-rank bar: averageRank is the mean normalized rank, so exactly k
-        // (tier k attained) ends at tier k's chunk's right edge; the completed rank ticks its chunk's end.
+        // (tier k attained) ends at tier k's chunk's right edge. The recent average is a mean of
+        // normalized ranks too, so it is a position on the same chunk scale as it stands.
         m_averageRankFills.clear();
-        m_completedRankPosition = -1.0;
         if (trackable && benchmark && averageRank)
             for (const double fill: rankChunkFills(*averageRank, benchmark->tiers().size()))
                 m_averageRankFills.push_back(fill);
-        if (trackable && benchmark && completedRank)
-            for (std::size_t index = 0; index < benchmark->tiers().size(); ++index)
-                if (benchmark->tiers()[index].id == *completedRank)
-                    m_completedRankPosition = static_cast<double>(index + 1);
 
         m_totalPlaytime = benchmark ? formatDuration(benchmark->totalPlaytimeSeconds()) : QString();
         m_scenariosAtNextTier = benchmark ? benchmark->scenariosAtNextTier() : 0;

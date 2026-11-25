@@ -71,7 +71,7 @@ namespace ksv::ui {
             summary.completedRankColor = vm.completedRankColor();
             summary.averageRank = vm.averageRank();
             for (const QVariant &fill: vm.averageRankFills()) summary.averageRankFills.push_back(fill.toDouble());
-            summary.completedRankPosition = vm.completedRankPosition();
+            summary.recentAverageRankPosition = vm.recentAverageRankPosition();
             summary.totalPlaytime = vm.totalPlaytime();
             summary.nextTier = vm.nextTier();
             summary.nextTierColor = vm.nextTierColor();

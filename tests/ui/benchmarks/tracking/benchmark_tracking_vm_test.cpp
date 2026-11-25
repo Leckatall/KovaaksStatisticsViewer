@@ -449,7 +449,7 @@ TEST(RankChunkFills, WholeRanksEndAtTheirChunksRightEdgeAndFractionsFillTheNext)
     EXPECT_EQ(low[1], 0.0);
 }
 
-TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
+TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndRecentAverageMarker) {
     auto fake = std::make_shared<FakeBenchmarkTrackingUseCase>();
     auto unplayed = makeTrackableFixture();
     unplayed.runs.clear();
@@ -457,19 +457,24 @@ TEST(BenchmarkTrackingViewModel, AverageRankBarFillsAndCompletedRankTick) {
     BenchmarkTrackingViewModel vm{fake};
 
     EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{0, 0, 0}));
-    EXPECT_EQ(vm.completedRankPosition(), -1.0);
+    EXPECT_EQ(vm.recentAverageRankPosition(), -1.0) << "nothing played, no recent average";
+    EXPECT_TRUE(vm.recentAverageRank().isEmpty());
 
+    // 1w6ts' recent average of 600, 500 and 800 is 633.3, a twelfth of the way from Silver (600) to
+    // Gold (1000); pasu's 800 is halfway from Silver (700) to Gold (900). Their mean is 2 + 7/24.
     fake->show(makeTrackableFixture());
     fake->publish();
     EXPECT_EQ(listToFills(vm.averageRankFills()), (std::vector<double>{1, 1, 0.5}));
-    EXPECT_EQ(vm.completedRankPosition(), 2.0) << "the tick ends Silver's chunk";
+    EXPECT_NEAR(vm.recentAverageRankPosition(), 2.0 + 7.0 / 24.0, 1e-9);
+    EXPECT_EQ(vm.recentAverageRank(), "Silver · 29% to Gold");
 
     fake->snap.availability = BenchmarkTrackingState::Unavailable;
     fake->snap.benchmark.reset();
     fake->snap.visiblePlaytime.clear();
     fake->publish();
     EXPECT_TRUE(vm.averageRankFills().isEmpty());
-    EXPECT_EQ(vm.completedRankPosition(), -1.0);
+    EXPECT_EQ(vm.recentAverageRankPosition(), -1.0);
+    EXPECT_TRUE(vm.recentAverageRank().isEmpty());
 }
 
 TEST(BenchmarkTrackingSummaryTexts, BlockerTextCountsTheBlockers) {

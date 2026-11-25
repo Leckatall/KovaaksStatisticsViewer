@@ -123,7 +123,7 @@ namespace ksv::ui {
         return snapshot;
     }
 
-    // For a table of three tiers: a rank of 2.4, with 2 completed.
+    // For a table of three tiers: a rank of 2.4, with 2 completed and a recent average of 1.6.
     inline TableCaptureSummary tableFixtureSummary(const std::vector<presentation::ProgressGridTier> &tiers) {
         TableCaptureSummary summary;
         summary.attainedRank = tiers.at(2).name;
@@ -132,7 +132,7 @@ namespace ksv::ui {
         summary.completedRankColor = tiers.at(1).color;
         summary.averageRank = QStringLiteral("%1, 40% to %2").arg(tiers.at(1).name, tiers.at(2).name);
         summary.averageRankFills = {1.0, 1.0, 0.4};
-        summary.completedRankPosition = 2.0;
+        summary.recentAverageRankPosition = 1.6;
         summary.totalPlaytime = QStringLiteral("12h 30m");
         summary.nextTier = tiers.at(2).name;
         summary.nextTierColor = tiers.at(2).color;

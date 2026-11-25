@@ -63,7 +63,7 @@ namespace ksv::ui {
         EXPECT_EQ(snapshot->summary->attainedRank, vm.attainedRank());
         EXPECT_EQ(snapshot->summary->completedRank, vm.completedRank());
         EXPECT_EQ(snapshot->summary->averageRank, vm.averageRank());
-        EXPECT_EQ(snapshot->summary->completedRankPosition, vm.completedRankPosition());
+        EXPECT_EQ(snapshot->summary->recentAverageRankPosition, vm.recentAverageRankPosition());
         EXPECT_EQ(snapshot->summary->totalPlaytime, vm.totalPlaytime());
         EXPECT_EQ(snapshot->summary->nextTier, vm.nextTier());
         EXPECT_EQ(snapshot->summary->nextTierBlockerText, vm.nextTierBlockerText());

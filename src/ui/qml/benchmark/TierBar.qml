@@ -339,6 +339,8 @@ Item {
     property bool markerShown: false
     property real marker: 0
     property string markerDescription: ""
+    // Read to keep a surrounding tooltip out of the marker's way.
+    readonly property bool markerHovered: markerHover.hovered
     // Half the tick's drawn width, and the gap a threshold label keeps from it.
     readonly property real markerHalfWidth: 2
     readonly property real markerGap: 2
@@ -409,41 +411,4 @@ Item {
     ToolTip.visible: barHover.hovered && !markerHover.hovered && root.description.length > 0
     ToolTip.delay: Theme.shortToolTipDelay
     ToolTip.text: root.description
-
-    // --- tier tick -----------------------------------------------------------------
-    // A tick at position `tick` on the chunk scale: the boundary where chunk `tick` - 1
-    // ends and chunk `tick` starts (0 = the bar's start, chunkCount = the bar's end), or
-    // none when negative, with its own tooltip. Read tickHovered to
-    // keep a surrounding tooltip out of its way.
-    property int tick: -1
-    property string tickDescription: ""
-    readonly property bool tickHovered: tickHover.hovered
-
-    Item {
-        id: tickItem
-        objectName: root.objectName.length > 0 ? root.objectName + "_tick" : ""
-        readonly property real boundaryX: root.tick <= 0 ? 0
-                                          : root.tick >= root.chunkCount
-                                          ? root.width
-                                          : (root.chunkRight(root.tick - 1) + root.chunkLeft(root.tick)) / 2
-        visible: root.tick >= 0 && root.chunkCount > 0
-        z: 1
-        width: 9
-        height: root.height + 8
-        x: Math.round(boundaryX - width / 2)
-        y: -4
-        Accessible.role: Accessible.Indicator
-        Accessible.name: root.tickDescription
-
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 2
-            height: parent.height
-            color: root.palette.text
-        }
-        HoverHandler { id: tickHover }
-        ToolTip.visible: tickHover.hovered && root.tickDescription.length > 0
-        ToolTip.delay: Theme.shortToolTipDelay
-        ToolTip.text: root.tickDescription
-    }
 }

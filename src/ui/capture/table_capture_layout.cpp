@@ -81,8 +81,6 @@ namespace ksv::ui {
         constexpr qreal kSummaryCellGap = 24.0;
         constexpr qreal kSummaryLineGap = 2.0;
         constexpr qreal kSummaryChunkMinimum = 30.0;
-        constexpr qreal kCompletedTickWidth = 2.0;
-        constexpr qreal kCompletedTickOverhang = 4.0;
 
         // A label breaks only between words: an unbreakable word widens its column instead of being cut.
         constexpr QTextOption::WrapMode kWrapMode = QTextOption::WordWrap;
@@ -510,11 +508,11 @@ namespace ksv::ui {
             return attained;
         }
 
-        qreal scaleX(const double position, const TableMetrics &metrics) {
-            const auto count = static_cast<double>(metrics.chunks.size());
+        qreal scaleX(const double position, const std::vector<Column> &chunks) {
+            const auto count = static_cast<double>(chunks.size());
             const double clamped = std::clamp(position, 0.0, count);
             const auto index = static_cast<std::size_t>(std::min(count - 1.0, std::floor(clamped)));
-            const Column &chunk = metrics.chunks[index];
+            const Column &chunk = chunks[index];
             return chunk.x + (clamped - static_cast<double>(index)) * chunk.width;
         }
 
@@ -528,7 +526,7 @@ namespace ksv::ui {
         // into the bar just short of the digits, so the value stays legible.
         void appendMarker(std::vector<CaptureItem> &items, const double position, const QRectF &bar,
                           const QRectF *value, const CaptureAppearance &appearance, const TableMetrics &metrics) {
-            const qreal x = scaleX(position, metrics);
+            const qreal x = scaleX(position, metrics.chunks);
             const qreal top = bar.top() - kMarkerOverhang;
             const qreal fullHeight = bar.height() + 2.0 * kMarkerOverhang;
             const bool crossesValue = value && x + kMarkerHalfWidth + 1.0 > value->left() &&
@@ -864,23 +862,20 @@ namespace ksv::ui {
             if (grid.tiers.empty()) return;
 
             const qreal chunkWidth = (bar.width() - (count - 1.0) * kChunkGap) / count;
+            std::vector<Column> chunks;
+            chunks.reserve(grid.tiers.size());
             for (std::size_t i = 0; i < grid.tiers.size(); ++i) {
                 const qreal left = bar.left() + static_cast<qreal>(i) * (chunkWidth + kChunkGap);
+                chunks.push_back({left, chunkWidth});
                 appendTrackAndFill(items, QRectF(left, bar.top(), chunkWidth, bar.height()),
                                    fillWidth(summary.averageRankFills, chunkWidth, i),
                                    tierBarColor(grid.tiers[i], appearance), appearance);
             }
 
-            // Tick k is the boundary where chunk k - 1 ends, so it sits in the gap rather than on a chunk's edge.
-            const qreal tick = std::round(summary.completedRankPosition);
-            if (tick < 0.0) return;
-            const qreal x = tick >= count ? bar.right()
-                            : tick == 0.0 ? bar.left()
-                                          : bar.left() + tick * (chunkWidth + kChunkGap) - kChunkGap / 2.0;
-            appendRect(items,
-                       QRectF(x - kCompletedTickWidth / 2.0, bar.top() - kCompletedTickOverhang, kCompletedTickWidth,
-                              bar.height() + 2.0 * kCompletedTickOverhang),
-                       appearance.text);
+            // No value label on this bar, so the marker is never cut around one.
+            if (summary.recentAverageRankPosition < 0.0) return;
+            appendMarkerTick(items, appearance, scaleX(summary.recentAverageRankPosition, chunks),
+                             bar.top() - kMarkerOverhang, bar.height() + 2.0 * kMarkerOverhang);
         }
 
         Region summaryRegion(const TableCaptureSnapshot &snapshot, const TableCaptureSummary &summary,
@@ -924,13 +919,13 @@ namespace ksv::ui {
             appendCell(summary.captions.nextTier, summary.nextTier, summary.nextTierColor,
                        summary.nextTierBlockerText);
 
-            const QRectF bar(average.x, detailTop + kCompletedTickOverhang, average.width, barHeight(fonts));
+            const QRectF bar(average.x, detailTop + kMarkerOverhang, average.width, barHeight(fonts));
             appendAverageRankBar(region.items, summary, snapshot.grid, appearance, bar);
 
             const qreal detailBottom = detailTop + captionHeight;
             const qreal bottom = snapshot.grid.tiers.empty()
                                      ? detailBottom
-                                     : std::max(detailBottom, bar.bottom() + kCompletedTickOverhang);
+                                     : std::max(detailBottom, bar.bottom() + kMarkerOverhang);
             region.size = QSizeF(x - kSummaryCellGap, bottom);
             return region;
         }

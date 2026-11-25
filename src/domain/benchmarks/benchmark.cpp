@@ -469,6 +469,11 @@ namespace ksv::domain {
     const std::vector<RankBlocker> &Benchmark::nextTierBlockers() const { return m_nextTierBlockers; }
     int Benchmark::scenariosAtNextTier() const { return m_scenariosAtNextTier; }
     std::optional<double> Benchmark::averageRank() const { return m_averageRank; }
+
+    std::optional<double> Benchmark::recentAverageRank() const {
+        if (m_recentAverageRankHistory.empty()) return std::nullopt;
+        return m_recentAverageRankHistory.back().averageRank;
+    }
     const std::vector<AverageRankAfterRun> &Benchmark::averageRankHistory() const { return m_averageRankHistory; }
     const std::vector<AverageRankAfterRun> &Benchmark::recentAverageRankHistory() const {
         return m_recentAverageRankHistory;

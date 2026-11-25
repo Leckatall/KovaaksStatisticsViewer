@@ -88,8 +88,8 @@ Item {
             valueObjectName: "summaryCompletedRank"
         }
         // The average rank on the tier bar the progress grid uses: Iron, Bronze and
-        // Silver full and Gold half full at 3.5, with a tick where the completed rank's
-        // chunk ends. Where it sits ("Bronze · 60% to Silver") is in the tooltip.
+        // Silver full and Gold half full at 3.5, with the recent average marked as on the
+        // grid's rows. Where it sits ("Bronze · 60% to Silver") is in the tooltip.
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -119,13 +119,16 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     tiers: root.trackingVm && root.trackingVm.progressGrid ? root.trackingVm.progressGrid.tiers : []
                     fills: root.trackingVm && root.trackingVm.averageRankFills ? root.trackingVm.averageRankFills : []
-                    tick: root.trackingVm && root.trackingVm.completedRankPosition !== undefined
-                          ? Math.round(root.trackingVm.completedRankPosition) : -1
-                    tickDescription: root.trackingVm
-                                     ? qsTr("Completed rank: %1").arg(String(root.trackingVm.completedRank || "")) : ""
+                    readonly property real recentPosition: root.trackingVm
+                                                           && root.trackingVm.recentAverageRankPosition !== undefined
+                                                           ? Number(root.trackingVm.recentAverageRankPosition) : -1
+                    markerShown: recentPosition >= 0
+                    marker: Math.max(0, recentPosition)
+                    markerDescription: root.trackingVm
+                                       ? qsTr("Recent average rank: %1").arg(String(root.trackingVm.recentAverageRank || "")) : ""
                 }
                 HoverHandler { id: averageRankHover }
-                ToolTip.visible: averageRankHover.hovered && !averageRankBar.tickHovered
+                ToolTip.visible: averageRankHover.hovered && !averageRankBar.markerHovered
                 ToolTip.delay: Theme.shortToolTipDelay
                 ToolTip.text: qsTr("Average rank: %1").arg(averageRankArea.text)
             }

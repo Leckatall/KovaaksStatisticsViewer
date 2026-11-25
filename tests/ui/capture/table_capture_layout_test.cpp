@@ -1132,9 +1132,21 @@ namespace ksv::ui {
             EXPECT_NEAR(fill.front().width(), chunks.at(i).width() * summary.averageRankFills.at(i), 1.0);
         }
 
-        const std::vector<QRectF> ticks = rectsFilled(layout, above, snapshot.appearance.text);
+        const std::vector<QRectF> ticks = markerTicks(snapshot, layout, above);
         ASSERT_EQ(ticks.size(), 1u);
-        EXPECT_NEAR(ticks.front().center().x(), (chunks.at(1).right() + chunks.at(2).left()) / 2.0, 1.0);
+        EXPECT_NEAR(ticks.front().center().x(), chunks.at(1).left() + 0.6 * chunks.at(1).width(), 1.0)
+            << "the recent average sits inside its chunk, not snapped to a tier boundary";
+    }
+
+    TEST(TableCaptureRegions, TheSummaryBarHasNoMarkerWithoutARecentAverage) {
+        TableCaptureSnapshot snapshot = summarisedTable();
+        snapshot.summary->recentAverageRankPosition = -1.0;
+
+        const CaptureLayout layout = layoutTableCapture(snapshot, true);
+
+        const std::optional<qreal> top = tableTop(snapshot, layout);
+        ASSERT_TRUE(top);
+        EXPECT_TRUE(markerTicks(snapshot, layout, QRectF(0.0, 0.0, layout.size.width(), *top)).empty());
     }
 
     TEST(TableCaptureRegions, AnIncompleteTableStatesItsNoteAndHasNoSummary) {

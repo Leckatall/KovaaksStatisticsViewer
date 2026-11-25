@@ -564,6 +564,32 @@ TEST(BenchmarkRunHistory, HistoriesEndExactlyAtTheCurrentMeans) {
     EXPECT_EQ(evaluated.recentAverageRankHistory().back().averageRank, recent);
 }
 
+TEST(BenchmarkRecentAverageRank, IsWhereTheRecentHistoryEnds) {
+    const auto facts = std::vector{benchmarkFact("one", 100 * kDay, 150.0F),
+                                   benchmarkFact("two", 100 * kDay + 2'000, 120.0F),
+                                   benchmarkFact("one", 101 * kDay, 90.0F)};
+    const auto evaluated = Benchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
+                                     {resolvedEntry("one"), resolvedEntry("two")}, facts);
+    ASSERT_FALSE(evaluated.recentAverageRankHistory().empty());
+    ASSERT_TRUE(evaluated.recentAverageRank());
+    EXPECT_EQ(*evaluated.recentAverageRank(), evaluated.recentAverageRankHistory().back().averageRank);
+}
+
+// Unlike averageRank(), which is 0 with nothing played, there is no recent average without a member run.
+TEST(BenchmarkRecentAverageRank, IsAbsentWithoutMemberRuns) {
+    const auto evaluated = Benchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
+                                     {resolvedEntry("one"), resolvedEntry("two")},
+                                     std::vector{benchmarkFact("unrelated", 100 * kDay, 300.0F)});
+    EXPECT_FALSE(evaluated.recentAverageRank());
+}
+
+TEST(BenchmarkRecentAverageRank, IsAbsentForAnIncompleteDefinition) {
+    const auto evaluated = Benchmark(twoScenarioBenchmark(), {Completeness::Incomplete, {}},
+                                     {resolvedEntry("one"), resolvedEntry("two")},
+                                     std::vector<RunFact>{benchmarkFact("one", 100 * kDay, 300.0F)});
+    EXPECT_FALSE(evaluated.recentAverageRank());
+}
+
 TEST(BenchmarkRunHistory, ATrackableBenchmarkWithoutRunsHasEmptyHistoriesAndARankOfZero) {
     const auto evaluated = Benchmark(twoScenarioBenchmark(), {Completeness::Trackable, {}},
                                      {resolvedEntry("one"), resolvedEntry("two")}, {});
